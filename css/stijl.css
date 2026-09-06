@@ -1,0 +1,213 @@
+:root{ --r:14px }
+
+html[data-thema="donker"]{
+  --nacht:#111823;
+  --paneel:#1A2331;
+  --paneel-op:#212D3E;
+  --lijn:#2A3849;
+  --tekst:#E7EBF1;
+  --gedempt:#8A97A9;
+  --voeding:#E9A23B;
+  --luier:#5AA9D6;
+  --slaap:#6FBF9B;
+  --kolven:#C4785E;
+  --groei:#9FB84C;
+  --op-accent:#121820;
+  --schaduw:none;
+}
+
+html[data-thema="licht"]{
+  --nacht:#DCE2E7;
+  --paneel:#EAEEF1;
+  --paneel-op:#DAE1E7;
+  --lijn:#C7D1DA;
+  --tekst:#26313D;
+  --gedempt:#66747F;
+  --voeding:#B5761A;
+  --luier:#2C7898;
+  --slaap:#3C8664;
+  --kolven:#9C5540;
+  --groei:#6C7F27;
+  --op-accent:#FFFFFF;
+  --schaduw:0 1px 2px rgba(38,49,61,.06);
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;padding:0}
+body{
+  background:var(--nacht);
+  color:var(--tekst);
+  font-family:'Outfit',system-ui,-apple-system,sans-serif;
+  font-weight:400;
+  line-height:1.45;
+  padding-bottom:env(safe-area-inset-bottom);
+}
+.wrap{max-width:460px;margin:0 auto;padding:0 16px 40px}
+
+/* ---------- kop ---------- */
+header{padding:22px 0 16px;display:flex;align-items:baseline;justify-content:space-between;gap:12px}
+h1{font-size:26px;font-weight:600;margin:0;letter-spacing:-.01em}
+.leeftijd{color:var(--gedempt);font-size:14px;text-align:right;flex-shrink:0}
+.kopmeta{display:flex;align-items:center;gap:12px}
+.themaknop{
+  border:1px solid var(--lijn);background:var(--paneel);color:var(--gedempt);
+  width:36px;height:36px;border-radius:50%;display:grid;place-items:center;
+  cursor:pointer;flex-shrink:0;padding:0;
+}
+.themaknop svg{width:17px;height:17px;stroke:currentColor;fill:none;stroke-width:1.7;stroke-linecap:round}
+
+/* ---------- tellers ---------- */
+.tellers{
+  display:grid;grid-template-columns:repeat(3,1fr);
+  background:var(--paneel);border-radius:var(--r);overflow:hidden;box-shadow:var(--schaduw);
+}
+.teller{padding:14px 8px 15px;text-align:center;position:relative}
+.teller + .teller::before{
+  content:"";position:absolute;left:0;top:14px;bottom:14px;width:1px;background:var(--lijn);
+}
+.teller .waarde{font-size:25px;font-weight:500;line-height:1.1;font-variant-numeric:tabular-nums}
+.teller .wat{font-size:12px;color:var(--gedempt);margin-top:3px}
+.teller.leeg .waarde{color:var(--gedempt);font-weight:300}
+
+/* ---------- actieknoppen ---------- */
+.acties{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px}
+.actie{
+  border:none;border-radius:var(--r);padding:18px 14px;
+  background:var(--paneel);color:var(--tekst);
+  font-family:inherit;font-size:16px;font-weight:500;text-align:left;
+  display:flex;align-items:center;gap:12px;cursor:pointer;
+  border-left:3px solid var(--kleur,var(--lijn));
+  box-shadow:var(--schaduw);
+  transition:background .12s ease;
+}
+button.actie:active{background:var(--paneel-op)}
+.actie .punt{
+  width:34px;height:34px;border-radius:50%;flex-shrink:0;
+  background:color-mix(in srgb,var(--kleur) 18%,transparent);
+  display:grid;place-items:center;
+}
+.actie svg{width:19px;height:19px;stroke:var(--kleur);fill:none;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+.actie.loopt{background:color-mix(in srgb,var(--kleur) 14%,var(--paneel))}
+.actie .sub{display:block;font-size:12px;color:var(--gedempt);font-weight:400}
+
+/* tegel met een tweede ingang: tikken start of stopt, plus opent het van-tot scherm */
+.actie.metmeer{padding-right:6px;gap:6px}
+.actiehoofd{
+  flex:1;min-width:0;display:flex;align-items:center;gap:12px;
+  border:none;background:none;color:inherit;font:inherit;text-align:left;
+  padding:0;cursor:pointer;
+}
+.actie.metmeer:has(.actiehoofd:active){background:var(--paneel-op)}
+.actiemeer{
+  position:relative;flex-shrink:0;width:34px;height:34px;border-radius:9px;
+  border:none;background:none;cursor:pointer;display:grid;place-items:center;
+}
+/* 34px houdt de tegelhoogte gelijk aan de andere drie; dit vergroot alleen het raakvlak */
+.actiemeer::after{content:"";position:absolute;inset:-10px -8px}
+.actiemeer svg{width:17px;height:17px;stroke:var(--gedempt)}
+.actiemeer:active{background:var(--paneel-op)}
+
+/* ---------- tabs ---------- */
+nav{display:flex;gap:2px;margin:24px 0 14px;background:var(--paneel);padding:3px;border-radius:11px}
+nav button{
+  flex:1;border:none;background:none;color:var(--gedempt);
+  font-family:inherit;font-size:14px;font-weight:500;padding:9px 4px;border-radius:9px;cursor:pointer;
+}
+nav button[aria-selected="true"]{background:var(--paneel-op);color:var(--tekst)}
+
+/* ---------- panelen ---------- */
+.paneel{background:var(--paneel);border-radius:var(--r);padding:16px;box-shadow:var(--schaduw)}
+.paneel + .paneel{margin-top:10px}
+/* paneel en lijst delen dezelfde achtergrond: zonder tussenruimte lopen ze in elkaar over */
+.paneel + .rij,
+.paneel + .leegmelding{margin-top:14px}
+.paneel h2{font-size:13px;font-weight:500;color:var(--gedempt);margin:0 0 12px}
+
+.dagcijfers{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;text-align:center}
+.dagcijfers .n{font-size:22px;font-weight:500;font-variant-numeric:tabular-nums}
+.dagcijfers .l{font-size:12px;color:var(--gedempt)}
+
+/* ---------- lijst ---------- */
+.dagkop{
+  font-size:13px;color:var(--gedempt);margin:20px 0 8px;
+  display:flex;justify-content:space-between;align-items:baseline;
+}
+.rij{
+  display:flex;align-items:center;gap:12px;padding:12px 14px;
+  background:var(--paneel);border-radius:11px;margin-bottom:6px;
+  border-left:3px solid var(--kleur);box-shadow:var(--schaduw);
+}
+.rij .tijd{font-size:14px;color:var(--gedempt);font-variant-numeric:tabular-nums;width:44px;flex-shrink:0}
+.rij .omschr{flex:1;font-size:15px;min-width:0}
+.rij .omschr small{display:block;color:var(--gedempt);font-size:12px}
+.rij .weg{
+  border:none;background:none;color:var(--gedempt);font-size:20px;line-height:1;
+  padding:4px 2px;cursor:pointer;font-family:inherit;
+}
+
+.leegmelding{text-align:center;color:var(--gedempt);padding:34px 20px;font-size:15px}
+
+/* ---------- groei ---------- */
+.meetrij{display:flex;justify-content:space-between;align-items:baseline;padding:11px 0;border-bottom:1px solid var(--lijn)}
+.meetrij:last-child{border-bottom:none}
+.meetrij .d{color:var(--gedempt);font-size:14px}
+.meetrij .v{font-variant-numeric:tabular-nums;font-size:15px}
+.meetrij .v span{color:var(--gedempt);font-size:13px;margin-left:10px}
+svg.grafiek{width:100%;height:auto;display:block;margin-top:6px}
+.grafiekkop{display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin-bottom:2px}
+.grafiekkop h2{font-size:13px;font-weight:500;color:var(--gedempt)}
+.delta{font-size:13px;font-weight:500;font-variant-numeric:tabular-nums}
+.delta small{color:var(--gedempt);font-weight:400;margin-left:5px}
+.nuwaarde{font-size:29px;font-weight:500;line-height:1.15;font-variant-numeric:tabular-nums;letter-spacing:-.015em}
+.nuwaarde span{font-size:15px;color:var(--gedempt);font-weight:400}
+
+.knop{
+  width:100%;border:none;border-radius:11px;padding:14px;
+  background:var(--paneel-op);color:var(--tekst);
+  font-family:inherit;font-size:15px;font-weight:500;cursor:pointer;margin-top:12px;
+}
+.knop.vol{background:var(--groei);color:var(--op-accent)}
+
+/* ---------- bottom sheet ---------- */
+.overlay{
+  position:fixed;inset:0;background:rgba(8,12,18,.72);
+  display:none;align-items:flex-end;justify-content:center;z-index:50;
+}
+.overlay.open{display:flex}
+.sheet{
+  width:100%;max-width:460px;background:var(--paneel);
+  border-radius:20px 20px 0 0;padding:20px 18px calc(24px + env(safe-area-inset-bottom));
+  max-height:88vh;overflow-y:auto;
+  animation:omhoog .22s cubic-bezier(.22,.9,.3,1);
+}
+@keyframes omhoog{from{transform:translateY(100%)}to{transform:translateY(0)}}
+@media (prefers-reduced-motion:reduce){.sheet{animation:none}}
+.sheet h3{margin:0 0 16px;font-size:19px;font-weight:600}
+.veldlabel{font-size:13px;color:var(--gedempt);margin:16px 0 8px}
+.keuzes{display:flex;gap:8px;flex-wrap:wrap}
+.keuze{
+  flex:1;min-width:80px;border:1px solid var(--lijn);background:transparent;color:var(--tekst);
+  border-radius:11px;padding:13px 10px;font-family:inherit;font-size:15px;cursor:pointer;
+}
+.keuze[aria-pressed="true"]{background:var(--kleur);border-color:var(--kleur);color:var(--op-accent);font-weight:500}
+input[type=number],input[type=date],input[type=time],input[type=text]{
+  width:100%;background:var(--nacht);border:1px solid var(--lijn);color:var(--tekst);
+  border-radius:11px;padding:13px;font-family:inherit;font-size:16px;
+}
+input:focus-visible,button:focus-visible{outline:2px solid var(--luier);outline-offset:2px}
+.sheetknoppen{display:flex;gap:8px;margin-top:22px}
+.sheetknoppen button{
+  flex:1;border:none;border-radius:11px;padding:15px;
+  font-family:inherit;font-size:16px;font-weight:500;cursor:pointer;
+}
+.annuleer{background:var(--paneel-op);color:var(--gedempt)}
+.bewaar{background:var(--kleur);color:var(--op-accent)}
+.tweekolom{display:flex;gap:10px}
+.duurhint{margin-top:16px;font-size:13px;color:var(--gedempt)}
+.duurhint strong{color:var(--tekst);font-weight:500}
+.tweekolom > div{flex:1}
+
+footer{margin-top:26px;color:var(--gedempt);font-size:12.5px;line-height:1.6}
+footer button{
+  background:none;border:none;color:var(--gedempt);text-decoration:underline;
+  font-family:inherit;font-size:12.5px;padding:0;cursor:pointer;
+}
