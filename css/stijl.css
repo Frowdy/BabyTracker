@@ -32,6 +32,8 @@ html[data-thema="licht"]{
   --schaduw:0 1px 2px rgba(38,49,61,.06);
 }
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+/* eigen display-waarden winnen anders van het hidden-attribuut */
+[hidden]{display:none !important}
 html,body{margin:0;padding:0}
 body{
   background:var(--nacht);
@@ -205,6 +207,32 @@ input:focus-visible,button:focus-visible{outline:2px solid var(--luier);outline-
 .duurhint{margin-top:16px;font-size:13px;color:var(--gedempt)}
 .duurhint strong{color:var(--tekst);font-weight:500}
 .tweekolom > div{flex:1}
+
+/* ---------- inloggen en meldingen ---------- */
+.foutstrook{
+  position:fixed;top:0;left:0;right:0;z-index:60;cursor:pointer;
+  background:var(--kolven);color:var(--op-accent);
+  padding:calc(10px + env(safe-area-inset-top)) 16px 10px;
+  font-size:13.5px;line-height:1.4;text-align:center;
+}
+.inlogscherm{
+  min-height:100dvh;display:grid;place-items:center;padding:24px 16px;
+}
+.inlogkaart{
+  width:100%;max-width:340px;background:var(--paneel);
+  border-radius:var(--r);padding:24px 20px;box-shadow:var(--schaduw);
+}
+.inlogkaart h1{margin:0 0 4px;font-size:22px}
+.inlogkaart .veldlabel{margin-top:14px}
+.inlogkaart input{
+  width:100%;background:var(--nacht);border:1px solid var(--lijn);color:var(--tekst);
+  border-radius:11px;padding:13px;font-family:inherit;font-size:16px;
+}
+.inlogkaart .knop{margin-top:20px}
+.inlogfout{
+  margin-top:14px;font-size:13.5px;line-height:1.45;
+  color:var(--kolven);text-align:center;
+}
 
 footer{margin-top:26px;color:var(--gedempt);font-size:12.5px;line-height:1.6}
 footer button{

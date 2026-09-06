@@ -1,4 +1,8 @@
 
+import { BABY as baby } from './config.js';
+import { store, zetFoutmelder, volgEvents, stopVolgen } from './store.js';
+import { bewaakSessie } from './auth.js';
+
 /* ---------- hulpjes ---------- */
 const KLEUR = { voeding:'var(--voeding)', luier:'var(--luier)', slaap:'var(--slaap)', kolven:'var(--kolven)' };
 const $ = s => document.querySelector(s);
@@ -441,12 +445,6 @@ async function slaapWissel(){
 async function wisEvent(id){ await store.verwijderEvent(id); teken(); }
 async function wisMeting(id){ await store.verwijderMeting(id); teken(); }
 
-function wisAlles(){
-  store.events = [];
-  store.metingen = [];
-  teken();
-}
-
 /* ---------- tekenen ---------- */
 function teken(){ tekenKop(); tekenTellers(); tekenInhoud(); }
 
@@ -466,6 +464,54 @@ function themaWissel(){
 
 zetThema(matchMedia('(prefers-color-scheme: light)').matches ? 'licht' : 'donker');
 
+/* ---------- meldingen ---------- */
+let foutTimer = null;
+
+function toonFout(boodschap){
+  const strook = $('#foutstrook');
+  strook.textContent = boodschap;
+  strook.hidden = false;
+  clearTimeout(foutTimer);
+  foutTimer = setTimeout(() => { strook.hidden = true; }, 8000);
+}
+
+$('#foutstrook').addEventListener('click', () => { $('#foutstrook').hidden = true; });
+
+/* ---------- eerste keer laden ---------- */
+async function laadEerst(){
+  tekenKop();
+  $('#tellers').innerHTML = '';
+  $('#inhoud').innerHTML = '<div class="leegmelding">Bezig met laden…</div>';
+  await Promise.all([store.lijstEvents(), store.lijstMetingen()]);
+  teken();
+}
+
+/* De knoppen in de HTML roepen deze functies via onclick aan; een module
+   heeft geen globale scope, dus zetten we ze er zelf in. */
+Object.assign(window, {
+  naarTab, opdracht, kies, sluit, bewaar,
+  slaapWissel, werkSlaapduurBij, wisEvent, wisMeting, themaWissel
+});
+
 /* ---------- starten ---------- */
-teken();
-setInterval(() => { tekenTellers(); if(tab === 'vandaag') tekenVandaag(); }, 30000);
+zetFoutmelder(toonFout);
+
+bewaakSessie({
+  bijInloggen(){
+    laadEerst();
+    volgEvents(teken);          // wijziging van de partner: opnieuw tekenen
+  },
+  bijUitloggen(){
+    stopVolgen();
+    store.events = [];
+    store.metingen = [];
+    tab = 'vandaag';
+    sluit();
+  }
+});
+
+setInterval(() => {
+  if($('#app').hidden) return;
+  tekenTellers();
+  if(tab === 'vandaag') tekenVandaag();
+}, 30000);
