@@ -31,10 +31,21 @@ function dagnaam(sleutel){
   return new Date(sleutel).toLocaleDateString('nl-NL',{weekday:'long',day:'numeric',month:'long'});
 }
 
+/* Flesvoedingen van vóór de keuze hebben geen melk-veld: dat was moedermelk. */
+const melkNaam = d => d.melk === 'kunstvoeding' ? 'kunstvoeding' : 'moedermelk';
+
+/* Standaard de melk van de laatste fles, zodat het ook op de andere telefoon meeloopt. */
+function laatsteMelk(){
+  const fles = store.events
+    .filter(e => e.type === 'voeding' && e.detail && e.detail.bron === 'fles')
+    .sort((a,b) => new Date(b.start) - new Date(a.start))[0];
+  return fles && fles.detail.melk === 'kunstvoeding' ? 'kunstvoeding' : 'moedermelk';
+}
+
 function omschrijf(e){
   const d = e.detail || {};
   if(e.type === 'voeding'){
-    if(d.bron === 'fles') return { titel:'Fles', sub: d.ml + ' ml' };
+    if(d.bron === 'fles') return { titel:'Fles', sub: d.ml + ' ml · ' + melkNaam(d) };
     return { titel:'Borst ' + (d.kant === 'links' ? 'links' : 'rechts'), sub: d.minuten + ' min' };
   }
   if(e.type === 'luier') return { titel:{nat:'Luier — plas',poep:'Luier — poep',beide:'Luier — plas en poep'}[d.soort], sub:'' };
@@ -270,7 +281,8 @@ function opdracht(soort){
     <input type="time" id="tijd" value="${hhmm(nu)}">`;
 
   if(soort === 'voeding'){
-    concept = { bron:'borst', kant:'links', minuten:15, ml:90 };
+    concept = { bron:'borst', kant:'links', minuten:15, ml:90, melk:laatsteMelk() };
+    const kunst = concept.melk === 'kunstvoeding';
     open('Voeding', 'var(--voeding)', `
       <div class="veldlabel">Waarmee</div>
       <div class="keuzes" id="bron">
@@ -287,6 +299,11 @@ function opdracht(soort){
         <input type="number" id="minuten" value="15" min="1" max="120" inputmode="numeric">
       </div>
       <div id="flesvelden" style="display:none">
+        <div class="veldlabel">Soort melk</div>
+        <div class="keuzes">
+          <button class="keuze" aria-pressed="${!kunst}" onclick="kies('melk','moedermelk',this)">Moedermelk</button>
+          <button class="keuze" aria-pressed="${kunst}" onclick="kies('melk','kunstvoeding',this)">Kunstvoeding</button>
+        </div>
         <div class="veldlabel">Hoeveelheid in ml</div>
         <input type="number" id="ml" value="90" min="5" max="400" step="5" inputmode="numeric">
       </div>
@@ -399,7 +416,7 @@ async function bewaarSlaap(){
 
 async function bewaarVoeding(){
   const detail = concept.bron === 'fles'
-    ? { bron:'fles', ml:+$('#ml').value }
+    ? { bron:'fles', melk:concept.melk, ml:+$('#ml').value }
     : { bron:'borst', kant:concept.kant, minuten:+$('#minuten').value };
   await store.voegEventToe({ type:'voeding', start:metTijd(), eind:null, detail });
 }

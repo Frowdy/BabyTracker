@@ -9,5 +9,5 @@ export const SUPABASE_KEY = 'sb_publishable_mtnezdH-9jUBXI_BbuNQ7w_8j1Zvz5b';
 // Voorlopig hier; later uit een eigen tabel.
 export const BABY = {
   naam: 'Emily',
-  geboren: new Date('2026-08-18T00:00:00')
+  geboren: new Date('2026-09-18T17:19:00')
 };
