@@ -75,7 +75,7 @@ function tekenTellers(){
       <div class="waarde" style="color:${e?KLEUR[t]:''}">${w}</div>
       <div class="wat">${wat}</div></div>`;
   };
-  $('#tellers').innerHTML = cel('voeding','sinds voeding') + cel('luier','sinds luier') + cel('slaap','sinds slaap');
+  $('#tellers').innerHTML = cel('voeding','sinds voeding') + cel('luier','sinds luier') + cel('kolven','sinds kolven');
 
   const slaapt = store.events.find(e => e.type === 'slaap' && !e.eind);
   $('#slaapknop').classList.toggle('loopt', !!slaapt);
