@@ -169,6 +169,73 @@ svg.grafiek{width:100%;height:auto;display:block;margin-top:6px}
 }
 .knop.vol{background:var(--groei);color:var(--op-accent)}
 
+/* ---------- afbouwplan ---------- */
+.knop:disabled{opacity:.4;cursor:default}
+.knop small{color:var(--gedempt);font-weight:400;margin-left:4px}
+.knop.vol.afbouwkleur{background:var(--kolven)}
+.knop.vol.afbouwkleur small{color:inherit;opacity:.8}
+.knoppenrij{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:4px}
+.knoppenrij .knop{margin-top:8px;padding:13px 8px}
+/* een losse laatste knop over de volle breedte */
+.knoppenrij .knop:last-child:nth-child(odd){grid-column:1 / -1}
+.uitleg{color:var(--gedempt);font-size:13.5px;margin:8px 0 0}
+p.uitleg{margin:0}
+
+.fasetekst{font-size:15px;margin-top:2px}
+.fasetekst small{display:block;color:var(--gedempt);font-size:12.5px}
+.fasebalk{display:flex;gap:4px;margin:14px 0 4px}
+.fasebalk span{flex:1;height:5px;border-radius:3px;background:var(--lijn)}
+.fasebalk .klaar{background:color-mix(in srgb,var(--kolven) 45%,var(--lijn))}
+.fasebalk .nu{background:var(--kolven)}
+
+.melding{
+  border-radius:11px;padding:12px 14px;font-size:14px;line-height:1.45;margin-bottom:10px;
+  background:color-mix(in srgb,var(--voeding) 16%,var(--paneel));
+  border-left:3px solid var(--voeding);
+}
+.melding.sterk{background:color-mix(in srgb,var(--kolven) 22%,var(--paneel));border-left-color:var(--kolven);font-weight:500}
+.melding.zacht{background:var(--paneel-op);border-left-color:var(--kolven);margin:12px 0 4px}
+
+.kolfregel{display:flex;align-items:baseline;justify-content:space-between;gap:10px}
+.kolfml{font-size:17px;font-weight:500;color:var(--kolven);font-variant-numeric:tabular-nums}
+/* dagschema: één kolom per kolfmoment */
+.kolfschema{display:grid;gap:4px;margin:14px 0 4px;text-align:center}
+.slot{display:flex;flex-direction:column;align-items:center;gap:3px;padding:6px 0;border-radius:10px}
+.slot .bol{
+  width:26px;height:26px;border-radius:50%;padding:0;cursor:pointer;
+  border:2px solid var(--kolven);background:transparent;
+}
+span.bol{cursor:default}
+.slot.gedaan .bol{background:var(--kolven)}
+.slot.weg .bol{border:2px dashed var(--voeding)}
+.slot.weg.gedaan .bol{background:linear-gradient(to top,var(--kolven) 45%,transparent 45%)}
+.slottijd{font-size:12px;font-variant-numeric:tabular-nums}
+.slotsoort{font-size:10.5px;color:var(--gedempt)}
+.slot.weg .slotsoort{color:var(--voeding)}
+.slot.weg .slottijd{color:var(--gedempt);text-decoration:line-through}
+.slot.volgende{background:var(--paneel-op)}
+.slot.volgende .slottijd{font-weight:600}
+.schemarij .d small{display:block;font-size:11.5px;color:var(--voeding)}
+.slottijd{white-space:nowrap}
+
+.flesregel{display:flex;flex-wrap:wrap;gap:6px 16px;font-size:13.5px;margin-top:18px}
+.flesregel i{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:6px}
+.verhouding{display:flex;height:8px;border-radius:4px;overflow:hidden;background:var(--lijn);margin-top:8px}
+
+.signalen .keuze{flex:1 1 calc(50% - 4px);font-size:14px;padding:12px 8px}
+textarea{
+  width:100%;background:var(--nacht);border:1px solid var(--lijn);color:var(--tekst);
+  border-radius:11px;padding:12px 13px;font-family:inherit;font-size:16px;resize:vertical;
+}
+textarea:focus-visible{outline:2px solid var(--luier);outline-offset:2px}
+
+.schemarij.klaar{opacity:.5}
+.schemarij.nu .d,.schemarij.nu .v{color:var(--kolven);font-weight:500}
+.signaalrij{display:flex;gap:12px;padding:10px 0;border-bottom:1px solid var(--lijn);font-size:14px}
+.signaalrij:last-child{border-bottom:none}
+.signaalrij .d{color:var(--gedempt);width:78px;flex-shrink:0}
+.signaalrij small{display:block;color:var(--gedempt);font-size:12.5px}
+
 /* ---------- bottom sheet ---------- */
 .overlay{
   position:fixed;inset:0;background:rgba(8,12,18,.72);

@@ -87,6 +87,48 @@ export const store = {
     const a = await vraag('Meting verwijderen', () =>
       sb.from('baby_metingen').delete().eq('id', id));
     if(a) this.metingen = this.metingen.filter(m => m.id !== id);
+  },
+
+  /* ---------- afbouwplan ----------
+     Er is steeds één plan: de nieuwste rij. null = nog nooit gestart. */
+  plan: null,
+  signalen: [],
+
+  async laadAfbouw(){
+    const [p, s] = await Promise.all([
+      vraag('Afbouwplan ophalen', () =>
+        sb.from('afbouwplan').select('*').order('aangemaakt', { ascending:false }).limit(1)),
+      vraag('Signalen ophalen', () =>
+        sb.from('afbouw_signalen').select('*').order('datum', { ascending:true }))
+    ]);
+    if(p) this.plan = (p.data && p.data[0]) || null;
+    if(s) this.signalen = s.data || [];
+  },
+
+  async startPlan(datum){
+    const a = await vraag('Plan starten', () =>
+      sb.from('afbouwplan')
+        .insert({ startdatum:datum, fase_start:datum, fase:1, actief:true, extra_dagen:0 })
+        .select().single());
+    if(a) this.plan = a.data;
+  },
+
+  async wijzigPlan(velden){
+    if(!this.plan) return;
+    const a = await vraag('Plan bijwerken', () =>
+      sb.from('afbouwplan').update(velden).eq('id', this.plan.id).select().single());
+    if(a) this.plan = a.data;
+  },
+
+  // Eén rij per dag: bestaat hij al, dan worden alleen de meegegeven velden bijgewerkt.
+  async bewaarSignalen(datum, velden){
+    const a = await vraag('Signalen opslaan', () =>
+      sb.from('afbouw_signalen')
+        .upsert({ datum, ...velden, bijgewerkt:new Date().toISOString() }, { onConflict:'datum' })
+        .select().single());
+    if(!a) return;
+    this.signalen = this.signalen.filter(x => x.datum !== datum).concat(a.data)
+      .sort((x,y) => x.datum < y.datum ? -1 : 1);
   }
 };
 
@@ -104,6 +146,21 @@ export function volgEvents(bijWijziging){
     .subscribe();
 }
 
+/* Een eigen kanaal voor het afbouwplan: gaat daar iets mis (bijvoorbeeld
+   omdat de tabellen nog niet bestaan), dan blijft baby_events gewoon werken. */
+let afbouwKanaal = null;
+
+export function volgAfbouw(bijWijziging){
+  if(afbouwKanaal) sb.removeChannel(afbouwKanaal);
+  afbouwKanaal =sb.channel('afbouw')
+    .on('postgres_changes', { event:'*', schema:'public', table:'afbouwplan' },
+        async () => { await store.laadAfbouw(); bijWijziging(); })
+    .on('postgres_changes', { event:'*', schema:'public', table:'afbouw_signalen' },
+        async () => { await store.laadAfbouw(); bijWijziging(); })
+    .subscribe();
+}
+
 export function stopVolgen(){
   if(kanaal){ sb.removeChannel(kanaal); kanaal = null; }
+  if(afbouwKanaal){ sb.removeChannel(afbouwKanaal); afbouwKanaal = null; }
 }
