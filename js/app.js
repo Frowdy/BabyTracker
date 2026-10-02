@@ -1,7 +1,7 @@
 
-import { BABY as baby, AFBOUW_FASES, KOLFTIJDEN, OVERSLAAN_VOLGORDE } from './config.js?v=2';
-import { store, zetFoutmelder, volgEvents, volgAfbouw, stopVolgen } from './store.js?v=2';
-import { bewaakSessie } from './auth.js?v=2';
+import { BABY as baby, AFBOUW_FASES, KOLFTIJDEN, OVERSLAAN_VOLGORDE, VOEDING } from './config.js?v=4';
+import { store, zetFoutmelder, volgEvents, volgAfbouw, stopVolgen } from './store.js?v=4';
+import { bewaakSessie } from './auth.js?v=4';
 
 /* ---------- hulpjes ---------- */
 const KLEUR = { voeding:'var(--voeding)', luier:'var(--luier)', slaap:'var(--slaap)', kolven:'var(--kolven)' };
@@ -33,13 +33,15 @@ function dagnaam(sleutel){
 
 /* Flesvoedingen van vóór de keuze hebben geen melk-veld: dat was moedermelk. */
 const melkNaam = d => d.melk === 'kunstvoeding' ? 'kunstvoeding' : 'moedermelk';
+const mmIn = d => melkNaam(d) === 'moedermelk'   ? (d.ml || 0) : 0;
+const kvIn = d => melkNaam(d) === 'kunstvoeding' ? (d.ml || 0) : 0;
 
 /* Standaard de melk van de laatste fles, zodat het ook op de andere telefoon meeloopt. */
 function laatsteMelk(){
   const fles = store.events
     .filter(e => e.type === 'voeding' && e.detail && e.detail.bron === 'fles')
     .sort((a,b) => new Date(b.start) - new Date(a.start))[0];
-  return fles && fles.detail.melk === 'kunstvoeding' ? 'kunstvoeding' : 'moedermelk';
+  return fles ? melkNaam(fles.detail) : 'moedermelk';
 }
 
 function omschrijf(e){
@@ -90,13 +92,14 @@ let tab = 'vandaag';
 function naarTab(t){
   tab = t;
   document.querySelectorAll('nav button').forEach((b,i) =>
-    b.setAttribute('aria-selected', ['vandaag','historie','groei','afbouw'][i] === t));
+    b.setAttribute('aria-selected', ['vandaag','historie','groei','voeding','afbouw'][i] === t));
   teken();
 }
 
 async function tekenInhoud(){
   if(tab === 'vandaag') return tekenVandaag();
   if(tab === 'historie') return tekenHistorie();
+  if(tab === 'voeding'){ await store.laadAfbouw(); return tekenVoeding(); }
   if(tab === 'afbouw') return tekenAfbouw();
   return tekenGroei();
 }
@@ -308,8 +311,8 @@ function dagTotalen(sleutel){
   return {
     kolf: kolf.sort((a,b) => new Date(a.start) - new Date(b.start)),
     kolfMl: som(kolf),
-    moedermelk: som(fles.filter(e => melkNaam(e.detail) === 'moedermelk')),
-    kunstvoeding: som(fles.filter(e => melkNaam(e.detail) === 'kunstvoeding')),
+    moedermelk: fles.reduce((s,e) => s + mmIn(e.detail), 0),
+    kunstvoeding: fles.reduce((s,e) => s + kvIn(e.detail), 0),
     borst: op.filter(e => e.type === 'voeding' && e.detail && e.detail.bron === 'borst').length
   };
 }
@@ -413,19 +416,23 @@ const venster = t => uurtekst(minuten(t) - SPELING) + '–' + uurtekst(minuten(t
 const overgeslagen = kolven =>
   new Set(OVERSLAAN_VOLGORDE.slice(0, Math.max(0, KOLFTIJDEN.length - kolven)));
 
-/* De kolfmomenten van vandaag op tijd gesorteerd. Elk moment krijgt de
-   kolf-logs die dichter bij hem liggen dan bij zijn buren, zodat een
-   kolfbeurt wat te vroeg of te laat nog bij het goede moment hoort. */
-function dagschema(kolven, logs){
-  const weg = overgeslagen(kolven);
-  const tijden = [...KOLFTIJDEN].sort((a,b) => minuten(a) - minuten(b));
+/* Vaste tijden van vandaag op volgorde. Elk moment krijgt de logs die
+   dichter bij hem liggen dan bij zijn buren, zodat een kolfbeurt of fles
+   wat te vroeg of te laat nog bij het goede moment hoort. */
+function verdeelOverTijden(lijst, logs){
+  const tijden = [...lijst].sort((a,b) => minuten(a) - minuten(b));
   const opMin = logs.map(e => { const d = new Date(e.start); return { e, m:d.getHours() * 60 + d.getMinutes() }; });
   return tijden.map((t, i) => {
     const m = minuten(t);
     const van = i ? (minuten(tijden[i-1]) + m) / 2 : 0;
     const tot = i < tijden.length - 1 ? (m + minuten(tijden[i+1])) / 2 : 1440;
-    return { tijd:t, m, kolven:!weg.has(t), logs:opMin.filter(x => x.m >= van && x.m < tot).map(x => x.e) };
+    return { tijd:t, m, logs:opMin.filter(x => x.m >= van && x.m < tot).map(x => x.e) };
   });
+}
+
+function dagschema(kolven, logs){
+  const weg = overgeslagen(kolven);
+  return verdeelOverTijden(KOLFTIJDEN, logs).map(s => ({ ...s, kolven:!weg.has(s.tijd) }));
 }
 
 function vandaagPaneel(plan){
@@ -503,6 +510,12 @@ function signalenPaneel(){
   </div>`;
 }
 
+// de flessen die kunstvoeding worden als deze kolfmomenten vervallen
+function flesBij(kolftijden){
+  const flessen = VOEDING.tijden.filter(t => kolftijden.includes(VOEDING.kolfNa[t]));
+  return flessen.length ? ' → fles ' + flessen.map(t => uurtekst(minuten(t))).join(', ') + ' kunstvoeding' : '';
+}
+
 function schemaPaneel(plan){
   const nu = plan ? faseInfo(plan).nr : 0;
   return `<div class="paneel">
@@ -512,7 +525,7 @@ function schemaPaneel(plan){
       const vorige = i ? overgeslagen(AFBOUW_FASES[i-1].kolven) : new Set();
       const nieuw = [...overgeslagen(f.kolven)].filter(x => !vorige.has(x)).sort((a,b) => minuten(a) - minuten(b));
       return `<div class="meetrij schemarij${i + 1 === nu ? ' nu' : i + 1 < nu ? ' klaar' : ''}">
-      <span class="d">Fase ${i + 1}${nieuw.length && f.kolven ? `<small>${nieuw.map(t => uurtekst(minuten(t))).join(', ')} overslaan</small>` : ''}</span>
+      <span class="d">Fase ${i + 1}${nieuw.length && f.kolven ? `<small>${nieuw.map(t => uurtekst(minuten(t))).join(', ')} overslaan${flesBij(nieuw)}</small>` : ''}</span>
       <span class="v">${f.kolven ? f.kolven + '× per dag' : 'gestopt'}
         <span>${f.dagen ? f.dagen + ' dagen' : ''}</span></span></div>`;
     }).join('')}
@@ -555,7 +568,7 @@ function staafgrafiek(punten, r){
     return kop + '<div class="leegmelding" style="padding:10px 0 4px">Vanaf morgen verschijnt hier het verloop.</div>';
 
   const B = 320, H = 120, lm = 34, rm = 8, tm = 10, bm = 22;
-  const max = Math.max(...punten.map(p => p.v), 1);
+  const max = Math.max(...punten.map(p => p.v), r.doel || 0, 1);
   let stap = netteStap(max / 3);
   if(r.geheel) stap = Math.max(1, Math.ceil(stap));
   const top = Math.ceil(max / stap) * stap;
@@ -578,9 +591,13 @@ function staafgrafiek(punten, r){
       opacity="${i === punten.length - 1 ? .55 : 1}"><title>${korteDatum(p.d)}: ${p.v}${r.eenheid ? ' ' + r.eenheid : ''}</title></rect>`;
   }).join('');
 
+  // optionele streeflijn, bijvoorbeeld de dagbehoefte
+  const doel = r.doel ? `<line x1="${lm}" y1="${py(r.doel).toFixed(1)}" x2="${B - rm}" y2="${py(r.doel).toFixed(1)}"
+      stroke="var(--tekst)" stroke-width="1.2" stroke-dasharray="4 3" opacity=".55"/>` : '';
+
   const datum = s => new Date(s + 'T12:00').toLocaleDateString('nl-NL',{day:'numeric',month:'short'});
   return kop + `<svg class="grafiek" viewBox="0 0 ${B} ${H}" role="img" aria-label="${r.titel}">
-    ${assen}${staven}
+    ${assen}${staven}${doel}
     <text x="${lm}" y="${H - 6}" fill="var(--gedempt)" font-size="9.5" font-family="Outfit">${datum(punten[0].d)}</text>
     <text x="${B - rm}" y="${H - 6}" fill="var(--gedempt)" font-size="9.5"
       text-anchor="end" font-family="Outfit">vandaag</text>
@@ -613,26 +630,239 @@ async function bewaarNotitie(tekst){
   await store.bewaarSignalen(vandaagSleutel(), { notitie:tekst.trim() || null });
 }
 
+/* ---------- voedingsschema ----------
+   Dagbehoefte uit het laatste gewicht, de vaste tijden van VOEDING, en wat
+   er vandaag nog nodig is verdeeld over de voedingen die nog komen. */
+const rond5 = v => Math.round(v / 5) * 5;
+const flessenOp = sleutel => store.events.filter(e =>
+  e.type === 'voeding' && e.detail && e.detail.bron === 'fles' && dagsleutel(e.start) === sleutel);
+const mlVan = l => l.reduce((s,e) => s + (e.detail.ml || 0), 0);
+const laatsteDagen = n => Array.from({ length:n }, (_, i) => plusDagen(vandaagSleutel(), i - n + 1));
+
+/* De flessen die volgens de huidige fase van het afbouwplan kunstvoeding
+   zijn: die waarvan het kolfmoment erna wordt overgeslagen. Zonder plan
+   is alles moedermelk. */
+function kunstvoedingTijden(){
+  if(!store.plan) return new Set();
+  const weg = overgeslagen(faseInfo(store.plan).kolven);
+  return new Set(VOEDING.tijden.filter(t => weg.has(VOEDING.kolfNa[t])));
+}
+
+function laatsteGewicht(){
+  const m = store.metingen.filter(x => x.gewicht);
+  return m.length ? m[m.length - 1] : null;
+}
+
+function tekenVoeding(){
+  const w = laatsteGewicht();
+  if(!w){
+    $('#inhoud').innerHTML = `<div class="paneel"><h2>Voedingsschema</h2>
+      <p class="uitleg">De dagbehoefte is ${VOEDING.mlPerKg} ml per kilo. Voeg eerst een gewicht toe.</p></div>
+      <button class="knop vol" onclick="opdracht('meting')">Meting toevoegen</button>`;
+    return;
+  }
+  const kg = w.gewicht / 1000;
+  const behoefte = rond5(VOEDING.mlPerKg * kg);
+  const perFles = rond5(behoefte / VOEDING.tijden.length);
+  $('#inhoud').innerHTML = behoeftePaneel(w, kg, behoefte, perFles)
+    + voedingVandaagPaneel(behoefte, perFles)
+    + ritmePaneel()
+    + `<div class="paneel">${staafgrafiek(laatsteDagen(7).map(d => ({ d, v:mlVan(flessenOp(d)) })),
+        { titel:'Gedronken per dag', kleur:'var(--voeding)', eenheid:'ml', doel:behoefte })}
+       <div class="uitleg">Stippellijn: de dagbehoefte bij het huidige gewicht.</div></div>`;
+}
+
+function behoeftePaneel(w, kg, behoefte, perFles){
+  const gewogen = String(w.datum).slice(0,10);
+  const oud = dagenTussen(gewogen, vandaagSleutel());
+  return `<div class="paneel">
+    <div class="grafiekkop"><h2 style="margin:0">Dagbehoefte</h2>
+      <span class="delta" style="color:var(--gedempt)">${VOEDING.mlPerKg} ml × ${getal(kg, 2)} kg</span></div>
+    <div class="nuwaarde">${behoefte}<span> ml per dag</span></div>
+    <div class="fasetekst">${VOEDING.tijden.length} voedingen · ± ${perFles} ml per fles
+      <small>gewogen ${oud === 0 ? 'vandaag' : oud === 1 ? 'gisteren' : korteDatum(gewogen)}</small></div>
+    ${oud > 7 ? `<div class="melding zacht">De laatste weging is ${oud} dagen oud. Ze groeit snel: opnieuw wegen houdt de dagbehoefte kloppend.</div>` : ''}
+  </div>`;
+}
+
+function voedingVandaagPaneel(behoefte, perFles){
+  const flessen = flessenOp(vandaagSleutel());
+  const gegeven = mlVan(flessen);
+  const rest = Math.max(0, behoefte - gegeven);
+  const nu = new Date().getHours() * 60 + new Date().getMinutes();
+  const kv = kunstvoedingTijden();
+  const melkVan = s => kv.has(s.tijd) ? 'kunstvoeding' : 'moedermelk';
+  const maxFles = rond5(perFles * 1.25);
+  const genoeg = perFles * .85;          // vanaf hier telt een voeding als volledig
+
+  /* Per voeding: wat er gegeven is en tot wanneer hij open staat. Zonder
+     fles sluit hij aan het eind van zijn venster. Na een tussenvoeding
+     blijft hij open tot het venster van de volgende begint, zodat een
+     aanvulling een uur later er nog bij hoort. */
+  const schema = verdeelFlessen(flessen, genoeg).map((s, i, alle) => {
+    const ml = mlVan(s.logs);
+    const tot = i < alle.length - 1 ? alle[i+1].m - SPELING : 1440;
+    const compleet = ml >= genoeg;
+    const deels = ml > 0 && !compleet;
+    return {
+      ...s, ml, tot, compleet, deels,
+      mm: s.logs.reduce((x,e) => x + mmIn(e.detail), 0),
+      kv: s.logs.reduce((x,e) => x + kvIn(e.detail), 0),
+      open: !compleet && (deels ? tot : s.m + SPELING) > nu,
+      aanvullen: deels ? Math.max(5, rond5(perFles - ml)) : 0
+    };
+  });
+
+  // eerst aanvullen wat half is, de rest gaat over de voedingen die nog komen
+  const komend = schema.filter(s => s.open);
+  const volgende = komend[0] || null;
+  const heel = komend.filter(s => !s.deels);
+  const restNaAanvullen = Math.max(0, rest - komend.reduce((x,s) => x + s.aanvullen, 0));
+  const ruw = heel.length ? rond5(restNaAanvullen / heel.length) : 0;
+  const advies = Math.min(ruw, maxFles);
+
+  /* Het bolletje vult van onder naar boven tot wat er gegeven is, in de
+     kleur van de melk: moedermelk onderin, kunstvoeding erbovenop. */
+  const slots = schema.map(s => {
+    const gemist = !s.open && !s.ml;
+    const noemer = s.compleet ? s.ml : perFles;
+    const a = Math.min(100, s.mm / noemer * 100).toFixed(0);
+    const b = Math.min(100, (s.mm + s.kv) / noemer * 100).toFixed(0);
+    const vulling = s.ml
+      ? `background:linear-gradient(to top,var(--kolven) ${a}%,var(--voeding) ${a}% ${b}%,transparent ${b}%)` : '';
+    const klasse = `slot voedslot ${kv.has(s.tijd) ? 'kv' : 'mm'}${s.deels ? ' deels' : ''}${gemist ? ' gemist' : ''}${s === volgende ? ' volgende' : ''}`;
+    const titel = (s.mm && s.kv ? 'Gemengd: ' : '') + s.logs.map(e => klok(e.start) + ' · ' + e.detail.ml + ' ml ' + melkNaam(e.detail)).join(', ');
+    const bol = s.open
+      ? `<button class="bol" style="${vulling}" title="${titel}"
+           onclick="opdracht('voeding','${melkVan(s)}',${s.deels ? s.aanvullen : advies})"
+           aria-label="Fles ${melkVan(s)} van ${uurtekst(s.m)} loggen"></button>`
+      : `<span class="bol" style="${vulling}" title="${titel}"></span>`;
+    // moedermelk en kunstvoeding binnen één voeding: samen één gemengde voeding
+    const soort = s.mm && s.kv ? '<br>MM+KV' : s.logs.length > 1 ? ' · ' + s.logs.length + '×' : '';
+    const onder = s.deels && s.open ? `${s.ml} ml<br>nog ${s.aanvullen}`
+      : s.ml ? s.ml + ' ml' + soort
+      : gemist ? '—' : (kv.has(s.tijd) ? 'KV' : 'MM');
+    return `<div class="${klasse}">${bol}<span class="slottijd">${uurtekst(s.m)}</span>
+      <span class="slotsoort">${onder}</span></div>`;
+  }).join('');
+
+  let tekst;
+  if(!rest)
+    tekst = 'De dagbehoefte is gehaald. Heeft ze nog honger, geef dan gerust op verzoek.';
+  else if(!volgende)
+    tekst = `Nog ${rest} ml te gaan, maar de vaste tijden van vandaag zijn voorbij. Op verzoek bijgeven kan.`;
+  else if(volgende.deels){
+    const daarna = heel[0];
+    tekst = `<strong>${uurtekst(volgende.m)} aanvullen</strong>: nog <strong>± ${volgende.aanvullen} ml ${melkVan(volgende)}</strong>
+      (${volgende.ml} van ± ${perFles} ml gehad).
+      <small>Telt mee tot ${uurtekst(volgende.tot)}.${daarna
+        ? ` Daarna: ${uurtekst(daarna.m)}, ± ${advies} ml ${melkVan(daarna)}.` : ''}</small>`;
+  } else {
+    const loopt = volgende.m - SPELING <= nu;
+    tekst = `${loopt ? 'Nu voeden' : 'Volgende fles'}: <strong>${uurtekst(volgende.m)}</strong>
+      (${venster(volgende.tijd)}), <strong>± ${advies} ml ${melkVan(volgende)}</strong>.
+      <small>Nog ${rest} ml over ${komend.length} ${komend.length === 1 ? 'voeding' : 'voedingen'}${ruw > maxFles
+        ? '; niet meer dan ± ' + maxFles + ' ml per fles, liever op verzoek iets bijgeven' : ''}.</small>`;
+  }
+
+  const mmTotaal = flessen.reduce((x,e) => x + mmIn(e.detail), 0);
+  const kvTotaal = flessen.reduce((x,e) => x + kvIn(e.detail), 0);
+  const pct = Math.min(100, Math.round(gegeven / behoefte * 100));
+  return `<div class="paneel">
+    <h2>Vandaag</h2>
+    <div class="kolfregel">
+      <div class="nuwaarde">${gegeven}<span> / ${behoefte} ml</span></div>
+      <div class="kolfml" style="color:var(--voeding)">${flessen.length} ${flessen.length === 1 ? 'fles' : 'flessen'}</div>
+    </div>
+    <div class="verhouding" role="img" aria-label="${pct}% van de dagbehoefte">
+      <span style="width:${pct}%;background:var(--voeding)"></span></div>
+    <div class="kolfschema" style="grid-template-columns:repeat(${schema.length},1fr)">${slots}</div>
+    <div class="flesregel" style="margin-top:6px">
+      <span><i style="background:var(--kolven)"></i>MM moedermelk ${mmTotaal} ml</span>
+      <span><i style="background:var(--voeding)"></i>KV kunstvoeding ${kvTotaal} ml</span>
+    </div>
+    <div class="melding zacht">${tekst}</div>
+    ${store.plan ? `<div class="uitleg">Afbouwplan fase ${faseInfo(store.plan).nr}:
+      ${schema.length - kv.size} ${schema.length - kv.size === 1 ? 'fles' : 'flessen'} moedermelk,
+      ${kv.size} kunstvoeding (± ${kv.size * perFles} ml per dag).</div>` : ''}
+  </div>`;
+}
+
+/* Flessen bij de vaste tijden zetten, op volgorde van tijdstip. Een fles
+   hoort bij de laatste voeding waarvan het venster al begonnen is. Is die
+   voeding al compleet en zijn venster voorbij, dan is het geen aanvulling
+   meer maar een (vroege) volgende voeding. */
+function verdeelFlessen(flessen, genoeg){
+  const slots = [...VOEDING.tijden].sort((a,b) => minuten(a) - minuten(b))
+    .map(t => ({ tijd:t, m:minuten(t), logs:[] }));
+  [...flessen].sort((a,b) => new Date(a.start) - new Date(b.start)).forEach(e => {
+    const d = new Date(e.start), t = d.getHours() * 60 + d.getMinutes();
+    let i = 0;
+    while(i < slots.length - 1 && t >= slots[i+1].m - SPELING) i++;
+    if(i < slots.length - 1 && t >= slots[i].m + SPELING && mlVan(slots[i].logs) >= genoeg) i++;
+    slots[i].logs.push(e);
+  });
+  return slots;
+}
+
+/* Ritme: per dag een tijdlijn van 24 uur met een stip per fles (groter =
+   meer ml) en de vaste tijden als stippellijnen. Laat zien of de flessen
+   naar het schema toe schuiven en hoe lang de nachtpauze is. */
+function ritmePaneel(){
+  const dagen = laatsteDagen(7);
+  const B = 320, lm = 44, rm = 8, tm = 6, rij = 22, bm = 18;
+  const H = tm + rij * dagen.length + bm;
+  const px = m => lm + m / 1440 * (B - lm - rm);
+
+  const lijnen = VOEDING.tijden.map(t => `<line x1="${px(minuten(t)).toFixed(1)}" y1="${tm}"
+      x2="${px(minuten(t)).toFixed(1)}" y2="${H - bm}" stroke="var(--lijn)" stroke-width="1" stroke-dasharray="2 3"/>`).join('');
+  const uren = [0, 6, 12, 18, 24].map(u => `<text x="${px(u * 60).toFixed(1)}" y="${H - 5}" fill="var(--gedempt)"
+      font-size="9.5" text-anchor="middle" font-family="Outfit">${u}</text>`).join('');
+
+  const rijen = dagen.map((d, i) => {
+    const y = tm + rij * i + rij / 2;
+    const naam = d === vandaagSleutel() ? 'vandaag'
+      : new Date(d + 'T12:00').toLocaleDateString('nl-NL',{weekday:'short',day:'numeric'});
+    const stippen = flessenOp(d).map(e => {
+      const t = new Date(e.start), m = t.getHours() * 60 + t.getMinutes();
+      const r = 2.5 + Math.min(e.detail.ml || 0, 100) / 100 * 3.5;
+      return `<circle cx="${px(m).toFixed(1)}" cy="${y}" r="${r.toFixed(1)}" fill="var(--voeding)" opacity=".85">
+        <title>${klok(e.start)} · ${e.detail.ml} ml</title></circle>`;
+    }).join('');
+    return `<text x="0" y="${y + 3.5}" fill="var(--gedempt)" font-size="10" font-family="Outfit">${naam}</text>${stippen}`;
+  }).join('');
+
+  return `<div class="paneel">
+    <h2>Ritme, laatste 7 dagen</h2>
+    <svg class="grafiek" viewBox="0 0 ${B} ${H}" role="img" aria-label="Voedingstijden per dag">
+      ${lijnen}${rijen}${uren}
+    </svg>
+    <div class="uitleg">Stippellijnen: de vaste tijden. Hoe groter de stip, hoe meer ml.</div>
+  </div>`;
+}
+
 /* ---------- invoerschermen ---------- */
 let concept = {};
 
 const hhmm = d => String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0');
 
-function opdracht(soort){
+function opdracht(soort, melk, ml){
   const nu = new Date();
   const tijdveld = `<div class="veldlabel">Tijdstip</div>
     <input type="time" id="tijd" value="${hhmm(nu)}">`;
 
   if(soort === 'voeding'){
-    concept = { bron:'borst', kant:'links', minuten:15, ml:90, melk:laatsteMelk() };
+    // vanuit het voedingsschema: fles, met de soort melk en hoeveelheid van dat moment
+    const fles = !!melk;
+    concept = { bron:fles ? 'fles' : 'borst', kant:'links', minuten:15, ml:ml || 90, melk:melk || laatsteMelk() };
     const kunst = concept.melk === 'kunstvoeding';
     open('Voeding', 'var(--voeding)', `
       <div class="veldlabel">Waarmee</div>
       <div class="keuzes" id="bron">
-        <button class="keuze" aria-pressed="true" onclick="kies('bron','borst',this)">Borst</button>
-        <button class="keuze" aria-pressed="false" onclick="kies('bron','fles',this)">Fles</button>
+        <button class="keuze" aria-pressed="${!fles}" onclick="kies('bron','borst',this)">Borst</button>
+        <button class="keuze" aria-pressed="${fles}" onclick="kies('bron','fles',this)">Fles</button>
       </div>
-      <div id="borstvelden">
+      <div id="borstvelden"${fles ? ' style="display:none"' : ''}>
         <div class="veldlabel">Kant</div>
         <div class="keuzes">
           <button class="keuze" aria-pressed="true" onclick="kies('kant','links',this)">Links</button>
@@ -641,14 +871,14 @@ function opdracht(soort){
         <div class="veldlabel">Duur in minuten</div>
         <input type="number" id="minuten" value="15" min="1" max="120" inputmode="numeric">
       </div>
-      <div id="flesvelden" style="display:none">
+      <div id="flesvelden"${fles ? '' : ' style="display:none"'}>
         <div class="veldlabel">Soort melk</div>
         <div class="keuzes">
           <button class="keuze" aria-pressed="${!kunst}" onclick="kies('melk','moedermelk',this)">Moedermelk</button>
           <button class="keuze" aria-pressed="${kunst}" onclick="kies('melk','kunstvoeding',this)">Kunstvoeding</button>
         </div>
         <div class="veldlabel">Hoeveelheid in ml</div>
-        <input type="number" id="ml" value="90" min="5" max="400" step="5" inputmode="numeric">
+        <input type="number" id="ml" value="${concept.ml}" min="5" max="400" step="5" inputmode="numeric">
       </div>
       ${tijdveld}`, bewaarVoeding);
   }
@@ -862,7 +1092,7 @@ bewaakSessie({
   bijInloggen(){
     laadEerst();
     volgEvents(teken);          // wijziging van de partner: opnieuw tekenen
-    volgAfbouw(() => { if(tab === 'afbouw') tekenAfbouwNu(); });
+    volgAfbouw(() => { if(tab === 'afbouw') tekenAfbouwNu(); if(tab === 'voeding') tekenVoeding(); });
   },
   bijUitloggen(){
     stopVolgen();
@@ -879,5 +1109,6 @@ setInterval(() => {
   if($('#app').hidden) return;
   tekenTellers();
   if(tab === 'vandaag') tekenVandaag();
+  if(tab === 'voeding') tekenVoeding();
   if(tab === 'afbouw') tekenAfbouwNu();
 }, 30000);

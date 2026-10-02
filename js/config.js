@@ -45,3 +45,19 @@ export const OVERSLAAN_VOLGORDE = [
   '01:30',   // gem. 86 ml
   '08:00'    // gem. 87 ml, blijft het langst
 ];
+
+/* Voedingsschema: dagbehoefte = mlPerKg × het laatst gewogen gewicht,
+   verdeeld over de vaste tijden (elk met een halfuur speling). Voeden op
+   verzoek telt mee bij de dichtstbijzijnde tijd. Slaapt ze een voeding over,
+   dan wordt wat nog nodig is verdeeld over de voedingen die nog komen. */
+export const VOEDING = {
+  mlPerKg: 150,
+  tijden: ['01:00', '04:00', '07:00', '10:00', '13:00', '16:00', '19:00', '22:00'],
+
+  /* Het kolfmoment dat na elke voeding komt. Slaat het afbouwplan dat
+     kolfmoment over, dan wordt deze fles kunstvoeding. */
+  kolfNa: {
+    '01:00': '01:30', '04:00': '04:45', '07:00': '08:00', '10:00': '11:00',
+    '13:00': '14:00', '16:00': '17:00', '19:00': '20:00', '22:00': '23:00'
+  }
+};
