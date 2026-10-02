@@ -197,6 +197,7 @@ p.uitleg{margin:0}
 .melding.zacht{background:var(--paneel-op);border-left-color:var(--kolven);margin:12px 0 4px}
 
 .kolfregel{display:flex;align-items:baseline;justify-content:space-between;gap:10px}
+.verlichtregel{font-size:13px;color:var(--voeding);margin-top:2px}
 .kolfml{font-size:17px;font-weight:500;color:var(--kolven);font-variant-numeric:tabular-nums}
 /* dagschema: één kolom per kolfmoment */
 .kolfschema{display:grid;gap:4px;margin:14px 0 4px;text-align:center}

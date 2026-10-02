@@ -1,7 +1,7 @@
 
-import { BABY as baby, AFBOUW_FASES, KOLFTIJDEN, OVERSLAAN_VOLGORDE, VOEDING } from './config.js?v=4';
-import { store, zetFoutmelder, volgEvents, volgAfbouw, stopVolgen } from './store.js?v=4';
-import { bewaakSessie } from './auth.js?v=4';
+import { BABY as baby, AFBOUW_FASES, KOLFTIJDEN, OVERSLAAN_VOLGORDE, VOEDING } from './config.js?v=5';
+import { store, zetFoutmelder, volgEvents, volgAfbouw, stopVolgen } from './store.js?v=5';
+import { bewaakSessie } from './auth.js?v=5';
 
 /* ---------- hulpjes ---------- */
 const KLEUR = { voeding:'var(--voeding)', luier:'var(--luier)', slaap:'var(--slaap)', kolven:'var(--kolven)' };
@@ -367,11 +367,16 @@ function fasePaneel(plan){
   if(!plan.actief){
     hint = 'Het plan is gepauzeerd. Bij hervatten gaat het verder waar het was.';
   } else if(!f.laatste){
+    // verlichting telt niet als kolfbeurt, maar vaak verlichten is wel een signaal
     const gisteren = plusDagen(vandaagSleutel(), -1);
-    const gisterenGekolfd = gisteren >= plan.fase_start ? dagTotalen(gisteren).kolf.length : null;
+    const g = gisteren >= plan.fase_start ? kolfSplitsing(gisteren, f.kolven) : null;
+    const vandaagVerlicht = kolfSplitsing(vandaagSleutel(), f.kolven).verlichting.length;
     const volgende = AFBOUW_FASES[f.nr];
-    if(gisterenGekolfd !== null && gisterenGekolfd > f.kolven)
-      hint = `Gisteren kolfde je ${gisterenGekolfd} keer, meer dan de ${f.kolven} van deze fase. Overweeg de fase te verlengen.`;
+    if(g && g.gepland.length > f.kolven)
+      hint = `Gisteren kolfde je ${g.gepland.length} keer, meer dan de ${f.kolven} van deze fase. Overweeg de fase te verlengen.`;
+    else if((g && g.verlichting.length >= 2) || vandaagVerlicht >= 2)
+      hint = `${vandaagVerlicht >= 2 ? 'Vandaag al ' + vandaagVerlicht : 'Gisteren ' + g.verlichting.length}× verlichting nodig gehad.
+        Dat mag, maar is het vaak nodig, overweeg dan de fase te verlengen.`;
     else if(f.dag > f.totaal)
       hint = `De ${f.totaal} dagen van deze fase zijn voorbij. Klaar voor fase ${f.nr + 1}
         (${volgende.kolven ? volgende.kolven + '× kolven per dag' : 'stoppen met kolven'})? Jullie beslissen.`;
@@ -435,10 +440,23 @@ function dagschema(kolven, logs){
   return verdeelOverTijden(KOLFTIJDEN, logs).map(s => ({ ...s, kolven:!weg.has(s.tijd) }));
 }
 
+/* De kolfbeurten van een dag gesplitst: bij een gepland moment, of bij een
+   overgeslagen moment. Die laatste zijn verlichting en tellen niet als
+   kolfbeurt. Gaat uit van de huidige fase. */
+function kolfSplitsing(sleutel, kolven){
+  const schema = dagschema(kolven, dagTotalen(sleutel).kolf);
+  return {
+    gepland:     schema.filter(s => s.kolven).flatMap(s => s.logs),
+    verlichting: schema.filter(s => !s.kolven).flatMap(s => s.logs)
+  };
+}
+
 function vandaagPaneel(plan){
   const f = faseInfo(plan);
   const t = dagTotalen(vandaagSleutel());
-  const n = t.kolf.length;
+  const { gepland, verlichting } = kolfSplitsing(vandaagSleutel(), f.kolven);
+  const n = gepland.length;
+  const verlichtMl = verlichting.reduce((x,e) => x + (e.detail.ml || 0), 0);
 
   const schema = dagschema(f.kolven, t.kolf);
   const nu = new Date().getHours() * 60 + new Date().getMinutes();
@@ -481,6 +499,7 @@ function vandaagPaneel(plan){
       <div class="nuwaarde">${n}<span> / ${f.kolven} keer gekolfd</span></div>
       <div class="kolfml">${t.kolfMl} ml</div>
     </div>
+    ${verlichting.length ? `<div class="verlichtregel">+ ${verlichting.length}× verlichting · ${verlichtMl} ml</div>` : ''}
     <div class="kolfschema" style="grid-template-columns:repeat(${schema.length},1fr)">${slots}</div>
     <div class="melding zacht">${volgendeTekst}</div>
 
