@@ -3,7 +3,7 @@
    Registreren gebeurt in Supabase zelf, dus hier alleen aanmelden,
    afmelden en het tonen of verbergen van de app.
    ===================================================================== */
-import { sb } from './store.js';
+import { sb } from './store.js?v=2';
 
 const $ = s => document.querySelector(s);
 

@@ -1,7 +1,7 @@
 
-import { BABY as baby, AFBOUW_FASES, KOLFTIJDEN, OVERSLAAN_VOLGORDE } from './config.js';
-import { store, zetFoutmelder, volgEvents, volgAfbouw, stopVolgen } from './store.js';
-import { bewaakSessie } from './auth.js';
+import { BABY as baby, AFBOUW_FASES, KOLFTIJDEN, OVERSLAAN_VOLGORDE } from './config.js?v=2';
+import { store, zetFoutmelder, volgEvents, volgAfbouw, stopVolgen } from './store.js?v=2';
+import { bewaakSessie } from './auth.js?v=2';
 
 /* ---------- hulpjes ---------- */
 const KLEUR = { voeding:'var(--voeding)', luier:'var(--luier)', slaap:'var(--slaap)', kolven:'var(--kolven)' };

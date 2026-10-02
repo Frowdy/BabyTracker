@@ -5,7 +5,7 @@
    metingen), zodat app.js de gegevens synchroon kan blijven lezen.
    ===================================================================== */
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
-import { SUPABASE_URL, SUPABASE_KEY } from './config.js';
+import { SUPABASE_URL, SUPABASE_KEY } from './config.js?v=2';
 
 export const sb = createClient(SUPABASE_URL, SUPABASE_KEY);
 
