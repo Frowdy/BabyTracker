@@ -1,7 +1,8 @@
 
-import { BABY as baby, AFBOUW_FASES, KOLFTIJDEN, OVERSLAAN_VOLGORDE, VOEDING } from './config.js?v=5';
-import { store, zetFoutmelder, volgEvents, volgAfbouw, stopVolgen } from './store.js?v=5';
-import { bewaakSessie } from './auth.js?v=5';
+import { BABY as baby, AFBOUW_FASES, KOLFTIJDEN, OVERSLAAN_VOLGORDE, VOEDING } from './config.js?v=6';
+import { store, zetFoutmelder, volgEvents, volgAfbouw, stopVolgen } from './store.js?v=6';
+import { bewaakSessie } from './auth.js?v=6';
+import { sdScore, gewichtBijSd, MIN_LEEFTIJD, MAX_LEEFTIJD, BRON } from './groeicurve.js?v=6';
 
 /* ---------- hulpjes ---------- */
 const KLEUR = { voeding:'var(--voeding)', luier:'var(--luier)', slaap:'var(--slaap)', kolven:'var(--kolven)' };
@@ -159,21 +160,29 @@ async function tekenGroei(){
   const m = await store.lijstMetingen();
 
   const reeksen = [
-    { sleutel:'gewicht', titel:'Gewicht',     kleur:'var(--groei)',   eenheid:'kg', deel:1000, dec:3, dDec:0, dEenheid:'g'  },
     { sleutel:'lengte',  titel:'Lengte',      kleur:'var(--luier)',   eenheid:'cm', deel:1,    dec:1, dDec:1, dEenheid:'cm' },
     { sleutel:'hoofd',   titel:'Hoofdomtrek', kleur:'var(--kolven)',  eenheid:'cm', deel:1,    dec:1, dDec:1, dEenheid:'cm' }
   ];
 
-  let uit = reeksen.map(r => {
+  let uit = groeicurvePaneel() + reeksen.map(r => {
     const punten = m.filter(x => x[r.sleutel])
                     .map(x => ({ x:new Date(x.datum), y:x[r.sleutel] }));
     return `<div class="paneel">${grafiekblok(punten, r)}</div>`;
   }).join('');
 
+  const perWeging = Object.fromEntries(wegingen().map((p, i) => [p.id, i ? p : { ...p, geboorte:true }]));
+  const extra = x => {
+    const p = perWeging[x.id];
+    if(!p) return '';
+    const delen = [p.geboorte ? 'geboortegewicht' : '', p.z !== null ? sdTekst(p.z) : '',
+      p.pct !== null ? (p.pct >= 0 ? '+' : '−') + Math.abs(p.pct) + '% t.o.v. geboorte' : ''].filter(Boolean);
+    return delen.length ? `<small>${delen.join(' · ')}</small>` : '';
+  };
+
   uit += '<div class="paneel"><h2>Alle metingen</h2>';
   uit += m.length
     ? [...m].reverse().map(x => `<div class="meetrij">
-        <span class="d">${new Date(x.datum).toLocaleDateString('nl-NL',{day:'numeric',month:'short'})}</span>
+        <span class="d">${new Date(x.datum).toLocaleDateString('nl-NL',{day:'numeric',month:'short'})}${extra(x)}</span>
         <span class="v">${x.gewicht ? getal(x.gewicht/1000, 3) + ' kg' : ''}
           ${x.lengte ? '<span>' + getal(x.lengte,1) + ' cm</span>' : ''}
           ${x.hoofd ? '<span>' + getal(x.hoofd,1) + ' cm</span>' : ''}
@@ -273,6 +282,152 @@ function netteStap(ruw){
   const rest = ruw / macht;
   return (rest <= 1 ? 1 : rest <= 2 ? 2 : rest <= 2.5 ? 2.5 : rest <= 5 ? 5 : 10) * macht;
 }
+
+/* ---------- groeicurve gewicht ----------
+   Wegingen tegen de Nederlandse SD-lijnen (TNO 2009, zie groeicurve.js).
+   Het geboortegewicht is de eerste weging in de app. */
+const SD_LIJNEN = [-2.5, -2, -1, 0, 1, 2, 2.5];
+const BEREIKEN = {
+  '3m':  { naam:'0–3 mnd',  tot:0.25, stappen:[0, 1, 2, 3],            eenheid:'mnd', perJaar:12 },
+  '15m': { naam:'0–15 mnd', tot:1.25, stappen:[0, 3, 6, 9, 12, 15],    eenheid:'mnd', perJaar:12 },
+  '4j':  { naam:'0–4 jaar', tot:4,    stappen:[0, 1, 2, 3, 4],         eenheid:'jaar', perJaar:1 }
+};
+let groeiBereik = '15m';
+
+const sdTekst = z => {
+  const r = Math.round(z * 10) / 10;
+  return (r < 0 ? '−' : r > 0 ? '+' : '') + getal(Math.abs(r), 1) + ' SD';
+};
+const lijnNaam = z => (z < 0 ? '−' : z > 0 ? '+' : '') + getal(Math.abs(z), z % 1 ? 1 : 0);
+
+// alle wegingen op volgorde, met leeftijd, SD-score en % van het geboortegewicht
+function wegingen(){
+  const geboren = dagsleutel(baby.geboren);
+  const w = store.metingen.filter(x => x.gewicht).map(x => {
+    const d = String(x.datum).slice(0,10);
+    const dagen = dagenTussen(geboren, d);
+    const kg = x.gewicht / 1000;
+    return { id:x.id, d, dagen, jaar:dagen / 365.25, kg, z:sdScore(dagen / 365.25, kg) };
+  }).sort((a,b) => a.d < b.d ? -1 : 1);
+  const geboorte = w[0];
+  w.forEach(p => {
+    p.pct = geboorte && p !== geboorte && p.dagen <= 42 ? Math.round((p.kg / geboorte.kg - 1) * 100) : null;
+  });
+  return w;
+}
+
+/* Signaal: de laatste weging (vanaf 2 weken oud) ligt meer dan 1 SD van
+   een eerdere weging van hooguit 6 weken ervoor (ook vanaf 2 weken oud).
+   Geen diagnose; alleen een reden om het te bespreken. */
+function sdSignaal(w){
+  const laatste = w[w.length - 1];
+  if(!laatste || laatste.z === null || laatste.dagen < 14) return null;
+  const kandidaten = w.filter(p => p !== laatste && p.z !== null && p.dagen >= 14
+    && laatste.dagen - p.dagen > 0 && laatste.dagen - p.dagen <= 42
+    && Math.abs(laatste.z - p.z) > 1);
+  if(!kandidaten.length) return null;
+  const p = kandidaten.reduce((a,b) => Math.abs(laatste.z - b.z) > Math.abs(laatste.z - a.z) ? b : a);
+  return `Het gewicht is tussen ${korteDatum(p.d)} en ${korteDatum(laatste.d)} van ${sdTekst(p.z)} naar ${sdTekst(laatste.z)}
+    ${laatste.z > p.z ? 'gestegen' : 'gedaald'}: meer dan 1 SD-lijn. Een goed punt om met het consultatiebureau te bespreken.`;
+}
+
+function groeicurvePaneel(){
+  const w = wegingen();
+  const b = BEREIKEN[groeiBereik];
+  const knoppen = Object.entries(BEREIKEN).map(([k, v]) =>
+    `<button aria-pressed="${k === groeiBereik}" onclick="zetBereik('${k}')">${v.naam}</button>`).join('');
+  const kop = `<div class="grafiekkop"><h2 style="margin:0">Gewicht naar leeftijd</h2></div>`;
+
+  if(!w.length)
+    return `<div class="paneel">${kop}<div class="leegmelding" style="padding:14px 0 4px">Nog niet gewogen.</div></div>`;
+
+  const laatste = w[w.length - 1], vorige = w[w.length - 2];
+  let sub = laatste.z !== null ? sdTekst(laatste.z) : laatste === w[0] ? 'geboortegewicht' : 'SD-score vanaf 1 week';
+  if(vorige){
+    const dg = Math.round((laatste.kg - vorige.kg) * 1000), dd = Math.max(1, laatste.dagen - vorige.dagen);
+    sub += ` · ${dg >= 0 ? '+' : '−'}${Math.abs(dg)} g in ${dd} ${dd === 1 ? 'dag' : 'dagen'}`;
+  }
+  if(laatste.pct !== null) sub += ` · ${laatste.pct >= 0 ? '+' : '−'}${Math.abs(laatste.pct)}% t.o.v. geboorte`;
+
+  const signaal = sdSignaal(w);
+  return `<div class="paneel">
+    ${kop}
+    <div class="nuwaarde">${getal(laatste.kg, 3)}<span> kg</span></div>
+    <div class="fasetekst"><small>${sub}</small></div>
+    <div class="bereik">${knoppen}</div>
+    ${groeicurveSvg(w, b)}
+    ${signaal ? `<div class="melding zacht">${signaal}</div>` : ''}
+    <div class="bronregel">SD-lijnen −2,5 tot +2,5, meisjes. Bron: ${BRON}</div>
+  </div>`;
+}
+
+function groeicurveSvg(w, b){
+  const B = 320, H = 240, lm = 30, rm = 30, tm = 18, bm = 22;
+  const x1 = b.tot;
+  const zichtbaar = w.filter(p => p.jaar <= x1 + 1e-9);
+
+  // y-bereik: de buitenste lijnen plus de wegingen, afgerond op een nette stap
+  let lo = gewichtBijSd(MIN_LEEFTIJD, -2.5), hi = gewichtBijSd(Math.min(x1, MAX_LEEFTIJD), 2.5);
+  zichtbaar.forEach(p => { lo = Math.min(lo, p.kg); hi = Math.max(hi, p.kg); });
+  // hele of halve kilo's als stap, zodat de aslabels exact kloppen
+  const stap = [0.5, 1, 2, 5, 10].find(s => s >= (hi - lo) / 6) || 10;
+  const y0 = Math.floor(lo / stap) * stap, y1 = Math.ceil(hi / stap) * stap;
+
+  const px = x => lm + x / x1 * (B - lm - rm);
+  const py = kg => H - bm - (kg - y0) / (y1 - y0) * (H - tm - bm);
+
+  let raster = '';
+  for(let v = y0; v <= y1 + 1e-9; v += stap){
+    const y = py(v).toFixed(1);
+    raster += `<line x1="${lm}" y1="${y}" x2="${B - rm}" y2="${y}" stroke="var(--lijn)" stroke-width="1"/>
+      <text x="${lm - 6}" y="${(+y + 3.5).toFixed(1)}" fill="var(--gedempt)" font-size="9.5" text-anchor="end"
+        font-family="Outfit">${getal(v, stap < 1 ? 1 : 0)}</text>`;
+  }
+  b.stappen.forEach((s, i) => {
+    const x = px(s / b.perJaar).toFixed(1);
+    raster += `<line x1="${x}" y1="${tm}" x2="${x}" y2="${H - bm}" stroke="var(--lijn)" stroke-width="1" opacity=".6"/>
+      <text x="${x}" y="${H - 6}" fill="var(--gedempt)" font-size="9.5" text-anchor="middle"
+        font-family="Outfit">${s}${i === b.stappen.length - 1 ? ' ' + b.eenheid : ''}</text>`;
+  });
+  raster += `<text x="${lm - 6}" y="9" fill="var(--gedempt)" font-size="9" text-anchor="end" font-family="Outfit">kg</text>`;
+
+  // de SD-lijnen, bemonsterd vanaf 1 week (waar de tabel begint)
+  const xEind = Math.min(x1, MAX_LEEFTIJD), n = 90;
+  const xs = Array.from({ length:n + 1 }, (_, i) => MIN_LEEFTIJD + (xEind - MIN_LEEFTIJD) * i / n);
+  const pad = z => xs.map((x, i) => (i ? 'L' : 'M') + px(x).toFixed(1) + ' ' + py(gewichtBijSd(x, z)).toFixed(1)).join(' ');
+  const band = pad(2) + ' ' + [...xs].reverse().map(x => 'L' + px(x).toFixed(1) + ' ' + py(gewichtBijSd(x, -2)).toFixed(1)).join(' ') + ' Z';
+  // labels rechts; liggen lijnen dicht bij elkaar, dan schuiven de labels uit elkaar
+  const labelY = SD_LIJNEN.map(z => py(gewichtBijSd(xEind, z)) + 3);       // van onder (−2,5) naar boven
+  for(let i = labelY.length - 2; i >= 0; i--) labelY[i] = Math.max(labelY[i], labelY[i+1] + 9);
+  const lijnen = SD_LIJNEN.map((z, i) => {
+    const stijl = z === 0 ? 'stroke="var(--tekst)" stroke-width="1.4" opacity=".55"'
+      : Math.abs(z) === 2.5 ? 'stroke="var(--gedempt)" stroke-width="1" stroke-dasharray="3 3" opacity=".7"'
+      : 'stroke="var(--gedempt)" stroke-width="1" opacity=".7"';
+    return `<path d="${pad(z)}" fill="none" ${stijl}/>
+      <text x="${B - rm + 4}" y="${labelY[i].toFixed(1)}" fill="var(--gedempt)" font-size="8.5"
+        font-family="Outfit">${lijnNaam(z)}</text>`;
+  }).join('');
+
+  // haar wegingen
+  const co = zichtbaar.map(p => [px(p.jaar), py(p.kg)]);
+  const verloop = co.length > 1
+    ? `<path d="${co.map((c,i) => (i ? 'L' : 'M') + c[0].toFixed(1) + ' ' + c[1].toFixed(1)).join(' ')}"
+        fill="none" stroke="var(--groei)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>` : '';
+  const stippen = zichtbaar.map((p, i) => {
+    const laatst = i === zichtbaar.length - 1;
+    return `<circle cx="${co[i][0].toFixed(1)}" cy="${co[i][1].toFixed(1)}" r="${laatst ? 4 : 2.8}"
+      fill="${laatst ? 'var(--groei)' : 'var(--paneel)'}" stroke="var(--groei)" stroke-width="1.8">
+      <title>${korteDatum(p.d)}: ${getal(p.kg, 3)} kg${p.z !== null ? ' · ' + sdTekst(p.z) : ''}</title></circle>`;
+  }).join('');
+
+  return `<svg class="grafiek" viewBox="0 0 ${B} ${H}" role="img" aria-label="Gewicht naar leeftijd met SD-lijnen">
+    ${raster}
+    <path d="${band}" fill="var(--groei)" opacity=".07"/>
+    ${lijnen}${verloop}${stippen}
+  </svg>`;
+}
+
+function zetBereik(b){ groeiBereik = b; tekenGroei(); }
 
 /* ---------- afbouwplan ----------
    Het plan schuift nooit vanzelf door: de app rekent alleen uit waar je
@@ -1101,7 +1256,7 @@ Object.assign(window, {
   naarTab, opdracht, kies, sluit, bewaar,
   slaapWissel, werkSlaapduurBij, wisEvent, wisMeting, themaWissel,
   startPlan, volgendeFase, verlengFase, inkortFase, stapTerug, hervatPlan,
-  wisselSignaal, bewaarNotitie
+  wisselSignaal, bewaarNotitie, zetBereik
 });
 
 /* ---------- starten ---------- */

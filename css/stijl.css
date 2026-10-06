@@ -141,7 +141,8 @@ nav button[aria-selected="true"]{background:var(--paneel-op);color:var(--tekst)}
 .rij .tijd{font-size:14px;color:var(--gedempt);font-variant-numeric:tabular-nums;width:44px;flex-shrink:0}
 .rij .omschr{flex:1;font-size:15px;min-width:0}
 .rij .omschr small{display:block;color:var(--gedempt);font-size:12px}
-.rij .weg{
+.rij .weg,
+.meetrij .weg{
   border:none;background:none;color:var(--gedempt);font-size:20px;line-height:1;
   padding:4px 2px;cursor:pointer;font-family:inherit;
 }
@@ -159,6 +160,16 @@ svg.grafiek{width:100%;height:auto;display:block;margin-top:6px}
 .grafiekkop h2{font-size:13px;font-weight:500;color:var(--gedempt)}
 .delta{font-size:13px;font-weight:500;font-variant-numeric:tabular-nums}
 .delta small{color:var(--gedempt);font-weight:400;margin-left:5px}
+
+/* groeicurve */
+.bereik{display:flex;gap:2px;background:var(--nacht);padding:3px;border-radius:10px;margin:12px 0 2px}
+.bereik button{
+  flex:1;border:none;background:none;color:var(--gedempt);font-family:inherit;font-size:12.5px;
+  font-weight:500;padding:7px 4px;border-radius:8px;cursor:pointer;
+}
+.bereik button[aria-pressed="true"]{background:var(--paneel-op);color:var(--tekst)}
+.bronregel{font-size:11px;color:var(--gedempt);line-height:1.4;margin-top:8px}
+.meetrij .d small{display:block;font-size:11.5px;color:var(--gedempt)}
 .nuwaarde{font-size:29px;font-weight:500;line-height:1.15;font-variant-numeric:tabular-nums;letter-spacing:-.015em}
 .nuwaarde span{font-size:15px;color:var(--gedempt);font-weight:400}
 
